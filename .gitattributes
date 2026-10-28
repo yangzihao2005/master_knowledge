@@ -1,0 +1,15 @@
+# 笔记内容按原始字节存储，禁止 Git 自动转换 CRLF/LF
+# （Obsidian 在 Windows 写 CRLF，若自动转换会造成整库"假脏"）
+* -text
+
+# 二进制大文件：不做文本 diff / 合并
+*.writing  binary
+*.drawing  binary
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.gif      binary
+*.webp     binary
+*.pdf      binary
+*.mp3      binary
+*.mp4      binary
