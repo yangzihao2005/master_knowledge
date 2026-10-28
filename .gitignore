@@ -5,8 +5,17 @@
 .obsidian/*.log
 
 # 可重装的插件二进制（克隆后由 Obsidian 自行安装）
-.obsidian/plugins/
+# 用 plugins/* 而非 plugins/，才能对个别子目录开例外
+.obsidian/plugins/*
 .obsidian/plugins-backup/
+
+# 例外：无法从社区商店重装的本地编译/补丁版插件
+!.obsidian/plugins/ink/
+!.obsidian/plugins/realclaudian/
+# 但插件目录里的历史备份文件不入库（每个约 2.6MB）
+.obsidian/plugins/**/*.bak
+.obsidian/plugins/**/*.bak.*
+.obsidian/plugins/**/*.original-*
 
 # ---------- AI 会话记录（含对话全文与切片，不入库）----------
 .claudian/
