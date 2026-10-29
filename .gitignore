@@ -27,6 +27,9 @@
 scripts/.bili_cache.json
 scripts/.bili_cache.tmp
 
+# ---------- 大体积 PDF 本体（教科书/题库只做本地拷贝，Git 只同步 PDF++ 链接）----------
+*.pdf
+
 # ---------- Python 运行时缓存 ----------
 __pycache__/
 *.pyc
