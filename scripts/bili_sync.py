@@ -3,17 +3,17 @@
 """
 bili_sync.py —— B 站收藏夹 ⇄ 单个 Markdown 文件同步（Single-File Mode）
 
-全仓库只维护根目录的 `收藏夹.md` 一个文件，每个视频仅占一行。
+全仓库只维护根目录的 `B站收藏夹.md` 一个文件，每个视频仅占一行。
 
 功能总览
 --------
 1. 拉取 B 站全部分类收藏夹（含分页），得到 bvid / 标题 / 简介 / UP主 / 时长
-2. 解析 `收藏夹.md`：分区标题、`- [ ]` 勾选状态、缩进手写笔记、`<!-- bvid:BVxxx | locked:false -->`
+2. 解析 `B站收藏夹.md`：分区标题、`- [ ]` 勾选状态、缩进手写笔记、`<!-- bvid:BVxxx | locked:false -->`
 3. 三类增量动作：
    - 手动移动：对比 `scripts/.bili_cache.json`，发现某行被剪切到别的分区 → 立刻写 `locked:true`，以后永不覆盖
    - 云端新增：DeepSeek（deepseek-chat）返回 `{"category": ..., "guide": ...}`，单行插入对应分区顶部
    - 云端取消收藏：未勾选且行下无缩进笔记 → 直接删除；已勾选或有笔记 → 行尾追加 `*(B站已取消)*`
-4. 首次运行会把旧版 `11.灵感与收藏库/` 迁移进 `收藏夹.md`（含缩进笔记），随后把旧目录移入 `.trash/`
+4. 首次运行会把旧版 `11.灵感与收藏库/` 迁移进 `B站收藏夹.md`（含缩进笔记），随后把旧目录移入 `.trash/`
 
 用法
 ----
@@ -67,7 +67,8 @@ except ImportError:  # pragma: no cover
 SCRIPTS_DIR = Path(__file__).resolve().parent
 DEFAULT_VAULT = SCRIPTS_DIR.parent
 
-FAV_FILE_NAME = "收藏夹.md"
+# 根目录唯一的收藏夹文件：优先 B站收藏夹.md，兼容旧名 收藏夹.md
+FAV_FILE_NAMES = ("B站收藏夹.md", "收藏夹.md")
 CACHE_FILE_NAME = ".bili_cache.json"
 LEGACY_DIR_NAME = "11.灵感与收藏库"
 LEGACY_TRASH_DIR = ".trash"
@@ -148,7 +149,11 @@ class Config:
 
     @property
     def fav_file(self) -> Path:
-        return self.vault / FAV_FILE_NAME
+        for name in FAV_FILE_NAMES:
+            candidate = self.vault / name
+            if candidate.exists():
+                return candidate
+        return self.vault / FAV_FILE_NAMES[0]
 
     @property
     def cache_file(self) -> Path:
@@ -902,7 +907,7 @@ def migrate_legacy(cfg: Config, cache: Cache, summary: "SyncSummary", dry_run: b
         for path in sorted(legacy.rglob("*.md"))
         if not path.name.startswith("00_") and "回收站" not in str(path)
     ]
-    log.info("检测到旧版收藏库（%d 篇笔记），迁移进 %s ……", len(paths), FAV_FILE_NAME)
+    log.info("检测到旧版收藏库（%d 篇笔记），迁移进 %s ……", len(paths), cfg.fav_file.name)
 
     doc = load_doc(cfg.fav_file)
     existing = {video.bvid for video in scan_videos(doc)}
@@ -1115,7 +1120,7 @@ def run_sync(cfg: Config, dry_run: bool = False, skip_ai: bool = False) -> SyncS
     if doc is None:
         doc = load_doc(cfg.fav_file)
     videos = scan_videos(doc)
-    log.info("本地 %s 共有 %d 个视频条目。", FAV_FILE_NAME, len(videos))
+    log.info("本地 %s 共有 %d 个视频条目。", cfg.fav_file.name, len(videos))
 
     # ---------- 2. 手动移动 → 锁定 ----------
     detect_manual_moves(videos, cache, summary, dry_run)
