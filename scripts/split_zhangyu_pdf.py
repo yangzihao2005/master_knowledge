@@ -4,14 +4,14 @@
 split_zhangyu_pdf.py — 《张宇考研数学基础30讲》PDF 按讲切分
 
 配合 Obsidian `PDF++` 使用：PDF 本体只做本地拷贝、不进 Git（`*.pdf` 已忽略），
-Git 里只保留 `01.高数/张宇30讲.md` 里的框选坐标链接。
+Git 里只保留 `1.考研数学/01.高数/张宇30讲.md` 里的框选坐标链接。
 
 功能
 ----
 1. 读取源 PDF 书签（TOC），筛选 `第N讲` / `第N章`，自动算出每一讲的 [起始页, 结束页]
 2. 无书签时降级使用文件顶部的 `MANUAL_CHAPTERS`，并打印前 10 页文本辅助校准页码
-3. 输出到 `01.高数/张宇30讲_PDF/`，命名 `01_第01讲_函数极限与连续.pdf`
-4. 生成唯一入口 `01.高数/张宇30讲.md`（已存在且含手写内容时默认不覆盖）
+3. 输出到 `1.考研数学/01.高数/张宇30讲_PDF/`，命名 `01_第01讲_函数极限与连续.pdf`
+4. 生成唯一入口 `1.考研数学/01.高数/张宇30讲.md`（已存在且含手写内容时默认不覆盖）
 
 用法
 ----
@@ -67,8 +67,8 @@ MANUAL_CHAPTERS: list[tuple[int, str, int, int, str]] = [
 ]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-OUT_DIR = REPO_ROOT / "01.高数" / "张宇30讲_PDF"
-MD_PATH = REPO_ROOT / "01.高数" / "张宇30讲.md"
+OUT_DIR = REPO_ROOT / "1.考研数学" / "01.高数" / "张宇30讲_PDF"
+MD_PATH = REPO_ROOT / "1.考研数学" / "01.高数" / "张宇30讲.md"
 MD_HEADER = "# 📚 张宇30讲（PDF++ 摘录与错题总表）\n"
 ILLEGAL = re.compile(r'[\\/:*?"<>|\r\n\t]')
 TOC_RE = re.compile(r"^\s*第\s*(\d+)\s*([讲章])\s*[：:、.．\s]*(.*)$")

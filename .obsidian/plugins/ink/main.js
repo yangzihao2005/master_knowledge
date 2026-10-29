@@ -75371,7 +75371,7 @@ var createFoldersForFilepath = async (plugin, filePath) => {
 // 22408 patch（仅命名）：新建画布自动按「笔记名 + 光标上方最近标题」命名，强制存入 Ink/
 // 插入正文时仍使用原版 buildWritingEmbed（含 <!-- ink: 文件名 --> 注释，方便 AI 索引）。
 // ---------------------------------------------------------------------------
-var INK_DRAFT_FOLDER = "Ink";
+var INK_DRAFT_FOLDER = "_system/Ink";
 var INK_NAME_MAX_LEN = 60;
 var stripMarkdownForFilename = (raw) => {
   let s = (raw || "").toString();
