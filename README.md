@@ -24,8 +24,9 @@
  ┣ 📂 10.转写结果/            # ASR 输出的网课粗切文本
  ┣ 📂 Ink/                    # 手写草稿（自动按「笔记名_题号」命名 .writing）
  ┣ 📂 media-lib/              # 网课截图、PDF++ 框选 PNG、视频音频（Obsidian 附件默认目录）
- ┣ 📂 scripts/                # QuickAdd 宏脚本（见下表）
- ┣ 📄 AGENTS.md               # AI 行为规则：错题批改 + 网课转写精讲
+ ┣ 📂 scripts/                # QuickAdd 宏脚本 + B 站收藏同步（见下表）
+ ┣ 📄 AGENTS.md               # AI 行为规则：收藏夹 + 错题批改 + 网课转写精讲
+ ┣ 📄 收藏夹.md               # B 站收藏（单文件单行制，bili_sync.py 自动同步）
  ┣ 📄 README.md / 任务.md
  └ 📂 .obsidian/plugins/ink/  # 含魔改版 main.js 与整版本备份
 ```
@@ -56,6 +57,7 @@
 | `random_exam.js` | 从错题库加权随机抽 10~15 题（`#顽固错题` 权重高、`#已攻克` 几乎不抽中），**只留题干与配图**（剔除手稿/解析/错误答案），生成重测卷到 `抽测组卷/` | `Ctrl+Shift+R` | QuickAdd |
 | `run_asr.js` | QuickAdd 一键弹出终端调用下面的 ASR 批量转写，结果固化输出到 `10.转写结果/` | `Ctrl+Shift+A` | QuickAdd |
 | `mimo_asr_batch.py` | 小米 MiMo ASR 批量转写：视频 1min 精度切片 → mp3 → 逐片识别 → 合并带时间戳文本；限速、重试、断点续传 | — | Python3 + requests + ffmpeg |
+| `bili_sync.py` | B 站收藏夹 ⇄ 根目录 `收藏夹.md` 单文件同步：DeepSeek 分类 + 一句话指南、手动改分类自动 `locked:true`、取消收藏自动清理；`--serve` 供油猴一键触发 | — | Python3 + requests + pyyaml + flask |
 
 ### 3️⃣ 插件底座与快捷键
 
