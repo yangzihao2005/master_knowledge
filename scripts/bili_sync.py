@@ -144,6 +144,7 @@ class Config:
     vault: Path
     concurrency: int = 4
     timeout: int = 20
+    cache_path: Path | None = None
 
     @property
     def fav_file(self) -> Path:
@@ -151,7 +152,7 @@ class Config:
 
     @property
     def cache_file(self) -> Path:
-        return SCRIPTS_DIR / CACHE_FILE_NAME
+        return self.cache_path or (SCRIPTS_DIR / CACHE_FILE_NAME)
 
     @property
     def legacy_dir(self) -> Path:
@@ -731,14 +732,6 @@ def insert_top(section: Section, block: list[str]) -> None:
     section.lines[idx:idx] = block
 
 
-def remove_video_line(video: VideoLine) -> bool:
-    for idx, line in enumerate(video.section.lines):
-        if line == video.text:
-            del video.section.lines[idx]
-            return True
-    return False
-
-
 # ---- 单行字段改写 ----------------------------------------------------
 
 
@@ -1208,19 +1201,22 @@ def run_sync(cfg: Config, dry_run: bool = False, skip_ai: bool = False) -> SyncS
                 summary.reclassified += 1
                 continue
             new_text = set_guide(video.text, ai["guide"])
-            if target.category != video.section.category:
+            if target.category != video.section.category and not video.has_notes:
                 new_text = set_locked(new_text, False)
                 for idx, line in enumerate(video.section.lines):
                     if line == video.text:
                         del video.section.lines[idx]
                         break
                 insert_top(target, [new_text])
+                final_category = target.category
             else:
+                # 已有缩进笔记的条目不动位置，避免笔记与视频行分离
                 for idx, line in enumerate(video.section.lines):
                     if line == video.text:
                         video.section.lines[idx] = new_text
                         break
-            cache.items[video.bvid] = {"category": target.category, "locked": False, "pending": False}
+                final_category = video.section.category
+            cache.items[video.bvid] = {"category": final_category, "locked": video.locked, "pending": False}
             summary.reclassified += 1
             log.info("补分类完成：%s → %s", video.bvid, target.category)
 
