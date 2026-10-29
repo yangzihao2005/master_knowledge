@@ -9,7 +9,7 @@
  *  1. 扫描当前活动笔记中所有「标题行带 #错题」的区块（从该级标题开始，到下一个同级或更高级标题为止，
  *     完整保留题干、_system/media-lib/PDF++ 截图、"我的错误结果"、以及原版 Ink 插入块
  *     （<!-- ink: _system/Ink/xxx.writing --> 注释 + ```handwritten-ink 代码块）。
- *  2. 按标准格式追加到  3.复盘与题库/08.错题与重测库/数二错题|408错题/<当前文件名>_错题集.md，
+ *  2. 按标准格式追加到  3.复盘与题库/02.错题与重测库/数二错题|408错题/<当前文件名>_错题集.md，
  *     靠笔记所在目录自动判断科目（可在下方 SUBJECT_RULES 里增减关键字）。
  *  3. 每个错题区块底部预留占位符：💡 AI 思维分叉点与标准解析 / 🎯 核心考点标签。
  *  4. 原题本中所有 #错题 替换为 #已归档错题，防止重复提取；已归档过的题自动跳过。
@@ -35,7 +35,7 @@ const EXAM_TAGS_PLACEHOLDER = "**🎯 核心考点标签**：";
 const SUBJECT_RULES = [
 	{
 		folder: "408错题",
-		keys: ["04.数据结构", "05.计算机组成原理", "06.操作系统", "07.计算机网络"],
+		keys: ["01.数据结构", "02.计算机组成原理", "03.操作系统", "04.计算机网络"],
 	},
 	{
 		folder: "数二错题",
@@ -240,7 +240,7 @@ async function extractMistakes(params) {
 	let headerText = "";
 	if (!existingText) {
 		headerText = [
-			"> ℹ️ 由 `scripts/extract_mistakes.js` 自动归档；AI 批改按 `AGENTS.md` 错题批改规则执行（结合 `3.复盘与题库/09.答案库/` 与题下文字备注，自动跳过 Ink 画布）。",
+			"> ℹ️ 由 `scripts/extract_mistakes.js` 自动归档；AI 批改按 `AGENTS.md` 错题批改规则执行（结合 `3.复盘与题库/03.答案库/` 与题下文字备注，自动跳过 Ink 画布）。",
 			"",
 		].join("\n");
 	} else if (!existingText.endsWith("\n")) {
