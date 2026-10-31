@@ -421,6 +421,7 @@ def fix_structure(text, path):
     n = len(out)
     for i, line in enumerate(out):
         if is_table_row(line) and res and res[-1].strip() and '\x00' not in res[-1] \
+                and not is_table_row(res[-1]) \
                 and i + 1 < n and is_table_row(out[i + 1]):
             res.append('')
             stats['table_blank'] += 1
