@@ -1,0 +1,7 @@
+请帮我检查并修改 `.obsidian/plugins/pdf-plus/data.json` 文件（如果不存在则新建 JSON 对象，保留原有键值），写入以下配置项以解决安卓平板端矩形选区（rect embed）渲染灰白框的问题，同时严禁生成本地图片文件以节省 Git 空间：
+
+1. 将 `"rectEmbedStaticImage": true` 写入配置（让 PDF++ 在打开笔记时将 rect 选区在内存中一次性渲染为轻量静态图并立即销毁后台 PDF 实例，避免安卓 WebView 显存溢出白屏，且不向硬盘保存任何图片文件）。
+2. 将 `"rectEmbedResolution": 100`（或 `"rectImageResolution": 1`）写入配置，降低移动端画布渲染倍率。
+3. 将 `"highlightBacklinksInEmbeds": false` 写入配置，关闭嵌入框内的反向高亮计算以释放内存。
+
+请直接读取 `.obsidian/plugins/pdf-plus/main.js` 确认当前版本中控制 Rectangular selection 静态内存渲染（Static image / Canvas）的准确字段名，并更新到 `data.json` 中。
