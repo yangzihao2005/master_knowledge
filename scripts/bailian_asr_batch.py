@@ -44,6 +44,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -110,6 +111,17 @@ def human_size(n: float) -> str:
             return f"{n:.1f}{unit}"
         n /= 1024
     return f"{n:.1f}GB"
+
+
+def output_stem(src: Path, root: Path) -> str:
+    """用相对路径拼输出文件名，避免不同子目录里同名视频互相覆盖。"""
+    try:
+        rel = src.relative_to(root).with_suffix("")
+        parts = [p for p in rel.parts if p]
+    except ValueError:
+        parts = [src.stem]
+    name = "__".join(parts) if parts else src.stem
+    return re.sub(r'[<>:"/\\|?*]+', "_", name)
 
 
 def check_ffmpeg() -> None:
@@ -252,14 +264,20 @@ class BailianClient:
     # ---------- 临时上传 ----------
     def get_upload_policy(self) -> dict[str, Any]:
         url = f"{self.base_url}/uploads"
-        resp = self._request(
-            "GET", url,
-            params={"action": "getPolicy", "model": self.model},
-        )
-        data = resp.json().get("data")
-        if not data:
-            raise BailianError(f"获取上传凭证失败: {resp.text[:500]}")
-        return data
+        last: Exception | None = None
+        # 正常用当前模型申请；个别账号/模型不支持时退回通用 ASR 模型名
+        for model in (self.model, "qwen3-asr-flash"):
+            try:
+                resp = self._request(
+                    "GET", url,
+                    params={"action": "getPolicy", "model": model},
+                )
+                data = resp.json().get("data")
+                if data:
+                    return data
+            except BailianError as exc:
+                last = exc
+        raise BailianError(f"获取上传凭证失败: {last}")
 
     def upload_audio(self, path: Path) -> str:
         """上传到百炼临时 OSS，返回 oss://... 地址（48 小时有效）。"""
@@ -589,11 +607,14 @@ def prepare_record(
     rel_key: str,
     state: State,
     part_seconds: float,
+    out_stem: str,
+    fresh: bool = False,
 ) -> dict[str, Any]:
     """读取时长、规划片段，并复用上次状态里已完成的片段。"""
     record = state.get(rel_key) or {}
     duration = record.get("duration") or media_duration(src)
     record["duration"] = duration
+    record["out_stem"] = out_stem
 
     old_parts = {
         p["index"]: p for p in record.get("parts", []) if "index" in p
@@ -602,9 +623,15 @@ def prepare_record(
     for idx, start, dur in plan_parts(duration, part_seconds):
         p = dict(old_parts.get(idx) or {})
         p.update({"index": idx, "start": start, "duration": dur})
-        jp = Path(p.get("json") or "")
-        if jp.is_file() and jp.stat().st_size > 0:
-            p["status"] = "done"       # 上次已下载但没来得及更新状态
+        if fresh:
+            for k in ("status", "json", "task_id", "oss_url", "uploaded_at", "usage", "error"):
+                p.pop(k, None)
+        else:
+            jp = Path(p.get("json") or "")
+            if jp.is_file() and jp.stat().st_size > 0:
+                p["status"] = "done"   # 上次已下载但没来得及更新状态
+            elif p.get("status") == "done":
+                p.pop("status", None)  # JSON 丢了，必须重跑
         parts.append(p)
 
     record["parts"] = parts
@@ -633,7 +660,7 @@ def write_outputs(
     if not sentences:
         return False
 
-    stem = src.stem
+    stem = record.get("out_stem") or src.stem
     duration = record.get("duration") or 0
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
@@ -690,24 +717,31 @@ def main() -> None:
     parser.add_argument("--fresh", action="store_true", help="忽略断点，全部重跑")
     parser.add_argument("--keep-audio", action="store_true", help="保留临时抽出的 mp3")
     args = parser.parse_args()
-
     args.formats = {f.strip().lower() for f in args.formats.split(",") if f.strip()}
+    if not args.formats:
+        sys.exit("错误: --formats 不能为空")
     if not args.formats <= {"md", "srt", "txt"}:
         sys.exit("错误: --formats 只能包含 md,srt,txt")
+    if args.part_minutes <= 0:
+        sys.exit("错误: --part-minutes 必须大于 0")
+    if args.workers < 1:
+        sys.exit("错误: --workers 至少为 1")
 
     folder = Path(args.folder).expanduser().resolve()
     if not folder.is_dir():
         sys.exit(f"错误: 文件夹不存在: {folder}")
 
+    out_dir = Path(args.output).expanduser().resolve() if args.output else folder / "转写结果"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     files = sorted(
         p for p in folder.rglob("*")
-        if p.is_file() and p.suffix.lower() in MEDIA_EXTS
+        if p.is_file()
+        and p.suffix.lower() in MEDIA_EXTS
+        and out_dir not in p.parents        # 别把输出目录里的临时音频当成输入
     )
     if not files:
         sys.exit(f"错误: 在 {folder} 里没有找到音视频文件")
-
-    out_dir = Path(args.output).expanduser().resolve() if args.output else folder / "转写结果"
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     state_file = out_dir / "_asr_state.json"
     log_file = out_dir / "_asr.log"
@@ -788,15 +822,89 @@ def main() -> None:
     stats = {"seconds": 0.0}
     t0 = time.time()
 
-    for i, (src, duration) in enumerate(plan, 1):
+    # 先把所有文件的长短和片段规划好，再统一调度，做到跨文件并发
+    records: dict[str, tuple[Path, dict[str, Any]]] = {}
+    for src, _duration in plan:
         rel_key = f"{src.relative_to(folder)}|{src.stat().st_size}"
-        log.info("[%d/%d] %s", i, len(plan), src.name)
         try:
-            process_file(client, src, rel_key, out_dir, state, args, stats)
-        except KeyboardInterrupt:
-            raise
+            records[rel_key] = (
+                src,
+                prepare_record(
+                    src, rel_key, state,
+                    args.part_minutes * 60.0,
+                    output_stem(src, folder),
+                    args.fresh,
+                ),
+            )
         except Exception as exc:
-            log.error("文件处理失败 %s: %s", src.name, exc)
+            log.error("准备失败，跳过 %s: %s", src.name, exc)
+
+    pending: list[tuple[str, Path, dict[str, Any]]] = []
+    for key, (src, record) in records.items():
+        for p in record["parts"]:
+            if p.get("status") != "done" or not Path(p.get("json") or "").exists():
+                pending.append((key, src, p))
+
+    cached = sum(len(r["parts"]) for _, r in records.values()) - len(pending)
+    log.info("待转写 %d 段，断点命中 %d 段，并发 %d", len(pending), cached, args.workers)
+
+    tmpdirs: dict[str, Path] = {}
+    if pending:
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:
+            futures = {}
+            for key, src, p in pending:
+                record = records[key][1]
+                out_stem = record.get("out_stem") or src.stem
+                tmpdir = out_dir / "_audio" / out_stem
+                tmpdir.mkdir(parents=True, exist_ok=True)
+                tmpdirs[key] = tmpdir
+                work = dict(p)          # 工作线程改副本，状态由 update_part 统一写
+                futures[
+                    pool.submit(
+                        run_part, client, src, work, tmpdir,
+                        out_dir / "raw" / out_stem,
+                        args.keep_audio, args.poll_timeout, state, key,
+                    )
+                ] = (key, src, p)
+
+            for fut in as_completed(futures):
+                key, src, original = futures[fut]
+                record = records[key][1]
+                try:
+                    updated = fut.result()
+                    for i, q in enumerate(record["parts"]):
+                        if q["index"] == updated["index"]:
+                            record["parts"][i] = updated
+                            break
+                    state.update_part(key, updated["index"], updated)
+                    log.info(
+                        "  ✓ %s 段%d/%d 完成",
+                        src.name, updated["index"] + 1, len(record["parts"]),
+                    )
+                except Exception as exc:
+                    original["status"] = "failed"
+                    original["error"] = str(exc)
+                    state.update_part(key, original["index"], original)
+                    log.error(
+                        "  ✗ %s 段%d/%d 失败: %s",
+                        src.name, original["index"] + 1, len(record["parts"]), exc,
+                    )
+
+        if not args.keep_audio:
+            for d in tmpdirs.values():
+                shutil.rmtree(d, ignore_errors=True)
+
+    # 统一合并输出
+    for key, (src, record) in records.items():
+        try:
+            if write_outputs(src, record, out_dir, args.model, args.formats):
+                state.put(key, record)
+                stats["seconds"] += record["duration"]
+                log.info("  → %s: %s", src.name, ", ".join(record.get("outputs", [])))
+            else:
+                log.error("  %s 没有可用结果", src.name)
+        except Exception as exc:
+            log.error("输出失败 %s: %s", src.name, exc)
 
     elapsed = time.time() - t0
     log.info(
