@@ -481,6 +481,16 @@ def fallback_ai(reason: str = "") -> dict[str, Any]:
     }
 
 
+def keyword_ai(item: BiliItem) -> dict[str, Any]:
+    """无 AI（或 AI 连续失败）时的兜底：用关键词规则粗分区，保证视频直接落进正式分区。"""
+    text = f"{item.title} {item.intro} {' / '.join(item.folders)}"
+    return {
+        "category": _guess_category(text),
+        "guide": DEFAULT_GUIDE,
+        "pending": False,
+    }
+
+
 def parse_json_loose(text: str) -> dict[str, Any]:
     text = (text or "").strip()
     if text.startswith("```"):
@@ -544,20 +554,20 @@ class DeepSeekClient:
                 if attempt < retries:
                     time.sleep(wait)
 
-        return fallback_ai(last_error)
+        return keyword_ai(item)
 
 
 def classify_items(cfg: Config, items: list[BiliItem], skip_ai: bool) -> dict[str, dict[str, Any]]:
-    results: dict[str, dict[str, Any]] = {}
     if skip_ai:
-        log.info("--skip-ai 已启用，%d 个新视频放入待定区。", len(items))
-        return {item.bvid: fallback_ai("skip-ai") for item in items}
+        log.info("--skip-ai 已启用，%d 个新视频按关键词规则分区。", len(items))
+        return {item.bvid: keyword_ai(item) for item in items}
 
     if not cfg.api_key:
-        log.warning("未配置 DEEPSEEK_API_KEY，%d 个新视频先放入待定区。", len(items))
-        return {item.bvid: fallback_ai("no-api-key") for item in items}
+        log.info("未配置 DEEPSEEK_API_KEY，%d 个新视频按关键词规则自动分区。", len(items))
+        return {item.bvid: keyword_ai(item) for item in items}
 
     client = DeepSeekClient(cfg)
+    results: dict[str, dict[str, Any]] = {}
     done = 0
     with ThreadPoolExecutor(max_workers=cfg.concurrency) as pool:
         futures = {pool.submit(client.classify, item): item for item in items}
