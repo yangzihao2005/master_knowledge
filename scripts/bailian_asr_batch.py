@@ -792,11 +792,11 @@ def main() -> None:
     setup_logging(log_file)
     check_ffmpeg()
 
-    # 百炼临时上传单文件上限一般是 100MB，按 48kbps 估算把单段控制在 ~90MB 内
-    max_part_seconds = 90 * 1024 * 1024 / BYTES_PER_SECOND
+    # 接口单文件上限 12 小时；48kbps 下 12 小时约 260MB，远低于上传凭证上限
+    max_part_seconds = 12 * 3600
     if args.part_minutes * 60.0 > max_part_seconds:
         log.warning(
-            "  --part-minutes %.0f 过大，按 90MB 上限压到 %.0f 分钟",
+            "  --part-minutes %.0f 超过接口 12 小时上限，压到 %.0f 分钟",
             args.part_minutes, max_part_seconds / 60.0,
         )
         args.part_minutes = max_part_seconds / 60.0
