@@ -302,24 +302,33 @@ class BailianClient:
         raise BailianError(f"上传重试 {MAX_RETRIES} 次仍失败: {last_err}")
 
     # ---------- 异步任务 ----------
-    def submit(self, oss_url: str) -> str:
-        parameters: dict[str, Any] = {
-            "enable_itn": self.enable_itn,
-            "enable_words": self.enable_words,
-            "channel_id": [0],
-        }
-        if self.language and self.language != "auto":
-            parameters["language"] = self.language
-        if self.diarize:
-            parameters["diarization_enabled"] = True
-        if self.vocabulary:
-            parameters["vocabulary"] = self.vocabulary
+    @property
+    def is_qwen3(self) -> bool:
+        return "qwen3-asr-flash-filetrans" in self.model
 
-        body = {
-            "model": self.model,
-            "input": {"file_urls": [oss_url]},
-            "parameters": parameters,
-        }
+    def submit(self, oss_url: str) -> str:
+        if self.is_qwen3:
+            # qwen3-asr-flash-filetrans：单文件、file_url（字符串）
+            input_obj: dict[str, Any] = {"file_url": oss_url}
+            parameters: dict[str, Any] = {
+                "channel_id": [0],
+                "enable_itn": self.enable_itn,
+                "enable_words": self.enable_words,
+            }
+            if self.language and self.language != "auto":
+                parameters["language"] = self.language
+        else:
+            # qwen-audio-3.x / paraformer：file_urls（数组）
+            input_obj = {"file_urls": [oss_url]}
+            parameters = {"channel_id": [0]}
+            if self.language and self.language != "auto":
+                parameters["language_hints"] = [self.language, "en"]
+            if self.diarize:
+                parameters["diarization_enabled"] = True
+            if self.vocabulary:
+                parameters["vocabulary"] = self.vocabulary
+
+        body = {"model": self.model, "input": input_obj, "parameters": parameters}
         headers = {
             "Content-Type": "application/json",
             "X-DashScope-Async": "enable",
@@ -338,31 +347,53 @@ class BailianClient:
         return task_id
 
     def poll(self, task_id: str, timeout: float = 7200.0) -> dict[str, Any]:
-        """轮询任务直到 SUCCEEDED / FAILED，返回 query 的 output。"""
+        """轮询任务直到 SUCCEEDED / FAILED，返回 {results, usage_seconds}。"""
         url = f"{self.base_url}/tasks/{task_id}"
         deadline = time.time() + timeout
         delay = 5.0
         while time.time() < deadline:
             resp = self._request("GET", url)
-            output = resp.json().get("output") or {}
+            body = resp.json()
+            output = body.get("output") or {}
             status = output.get("task_status")
 
             if status == "SUCCEEDED":
-                results = output.get("results") or []
+                results = self._normalize_results(output)
                 failed = [r for r in results if r.get("subtask_status") != "SUCCEEDED"]
-                if failed and len(failed) == len(results):
-                    r = failed[0]
+                if not results or (failed and len(failed) == len(results)):
+                    r = failed[0] if failed else {}
                     raise BailianError(
-                        f"子任务失败: {r.get('code')} {r.get('message')}"
+                        f"子任务失败: {r.get('code') or output.get('code')} "
+                        f"{r.get('message') or output.get('message')}"
                     )
-                return output
+                usage = body.get("usage") or output.get("usage") or {}
+                return {
+                    "results": results,
+                    "usage_seconds": usage.get("seconds") or usage.get("duration"),
+                }
             if status in ("FAILED", "CANCELED", "UNKNOWN"):
-                raise BailianError(f"任务状态 {status}: {json.dumps(output, ensure_ascii=False)[:500]}")
+                raise BailianError(
+                    f"任务状态 {status}: {output.get('code')} {output.get('message')}"
+                )
 
             time.sleep(delay)
             delay = min(delay * 1.5, 20.0)
 
         raise BailianError(f"轮询超时（task_id={task_id} 仍可稍后重跑续跑）")
+
+    @staticmethod
+    def _normalize_results(output: dict[str, Any]) -> list[dict[str, Any]]:
+        """兼容两种返回结构：
+        qwen3:   output.result.transcription_url
+        3.x:     output.results[].transcription_url
+        """
+        results = output.get("results")
+        if results:
+            return results
+        one = (output.get("result") or {}).get("transcription_url")
+        if one:
+            return [{"subtask_status": "SUCCEEDED", "transcription_url": one}]
+        return []
 
     def download_result(self, url: str) -> dict[str, Any]:
         # transcription_url 是预签名 OSS 地址，不能带 Authorization 头
@@ -496,8 +527,8 @@ def run_part(
         log.info("  段%d：复用已有任务 %s", index + 1, part["task_id"])
         try:
             output = client.poll(part["task_id"], timeout=poll_timeout)
-            result = download_first(client, output)
-            part["usage"] = output.get("usage", {}).get("duration")
+            result = download_first(client, output["results"])
+            part["usage"] = output.get("usage_seconds")
         except BailianError as exc:
             log.warning("  段%d：旧任务不可用（%s），重新提交", index + 1, exc)
             part.pop("task_id", None)
@@ -520,8 +551,8 @@ def run_part(
         log.info("  段%d：task_id=%s，等待转写...", index + 1, task_id)
 
         output = client.poll(task_id, timeout=poll_timeout)
-        result = download_first(client, output)
-        part["usage"] = output.get("usage", {}).get("duration")
+        result = download_first(client, output["results"])
+        part["usage"] = output.get("usage_seconds")
 
     raw_dir.mkdir(parents=True, exist_ok=True)
     raw_path = raw_dir / f"part_{index:03d}.json"
@@ -532,8 +563,8 @@ def run_part(
     return part
 
 
-def download_first(client: BailianClient, output: dict[str, Any]) -> dict[str, Any]:
-    for r in output.get("results") or []:
+def download_first(client: BailianClient, results: list[dict[str, Any]]) -> dict[str, Any]:
+    for r in results:
         if r.get("subtask_status") == "SUCCEEDED" and r.get("transcription_url"):
             return client.download_result(r["transcription_url"])
     raise BailianError("任务成功但没有可下载的 transcription_url")
@@ -761,6 +792,13 @@ def main() -> None:
         diarize=args.diarize,
         vocabulary=vocab,
     )
+
+    if client.is_qwen3 and (args.diarize or vocab):
+        log.warning(
+            "  %s 不支持说话人分离/热词，已忽略这些参数；"
+            "如需该功能请改用 --model qwen-audio-3.1-asr-flash-filetrans",
+            args.model,
+        )
 
     state = State(state_file)
     stats = {"seconds": 0.0}
