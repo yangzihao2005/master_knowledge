@@ -515,6 +515,7 @@ def run_part(
     raw_dir: Path,
     keep_audio: bool,
     poll_timeout: float,
+    on_progress=None,
 ) -> dict[str, Any]:
     """执行一个片段：上传 → 提交 → 轮询 → 下载 JSON。返回更新后的 part 记录。"""
     index = part["index"]
@@ -548,6 +549,8 @@ def run_part(
         log.info("  段%d：提交任务", index + 1)
         task_id = client.submit(oss_url)
         part["task_id"] = task_id
+        if on_progress:            # 立刻落盘，崩溃后可直接复用任务，避免重复计费
+            on_progress()
         log.info("  段%d：task_id=%s，等待转写...", index + 1, task_id)
 
         output = client.poll(task_id, timeout=poll_timeout)
@@ -603,6 +606,16 @@ def process_file(
     stem = src.stem
     raw_dir = out_dir / "raw" / stem
 
+    def persist() -> None:
+        record["parts"] = parts
+        state.put(rel_key, record)
+
+    # 上次已下载到 JSON 但没来得及更新状态：直接视为完成，避免重复计费
+    for p in parts:
+        jp = Path(p.get("json") or "")
+        if jp.is_file() and jp.stat().st_size > 0:
+            p["status"] = "done"
+
     todo = [p for p in parts if p.get("status") != "done" or not Path(p.get("json", "")).exists()]
     if todo:
         tmpdir = out_dir / "_audio" / stem
@@ -612,7 +625,7 @@ def process_file(
                 futures = {
                     pool.submit(
                         run_part, client, src, p, tmpdir, raw_dir,
-                        args.keep_audio, args.poll_timeout,
+                        args.keep_audio, args.poll_timeout, persist,
                     ): p
                     for p in todo
                 }
