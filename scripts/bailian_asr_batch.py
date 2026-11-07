@@ -4,8 +4,9 @@
 bailian_asr_batch.py —— 用阿里云百炼 Qwen3-ASR-Flash-Filetrans 批量转写网课视频/音频
 
 相比旧版 mimo_asr_batch.py 的区别：
-  * 不再切成 1 分钟小片，而是每 2 小时一段（可调），整段送异步接口
-  * 接口返回「句级时间戳」，直接生成 SRT / 带时间轴的 Markdown，而不是靠切片偏移估算
+  * 默认每 1 分钟一段（--part-minutes 可调），每段一个异步任务
+  * 接口本身返回「句级时间戳」，切片只是为了让输出按分钟分段，不靠偏移猜
+  * 输出按 1 分钟一段分组（Markdown 小标题 / txt 段头），同时保留句级时间戳
   * 音频走百炼「临时上传凭证」传到临时 OSS（48 小时有效），不需要自己开 OSS Bucket
   * 支持多任务并发、断点续跑、失败重试
 
@@ -464,9 +465,40 @@ def build_txt(sentences: list[dict[str, Any]], gap_seconds: float = 1.2) -> str:
     return "\n\n".join(paragraphs) + "\n"
 
 
+def group_segments(
+    sentences: list[dict[str, Any]],
+    segment_seconds: float,
+    duration: float | None = None,
+) -> list[tuple[int, float, float, list[dict[str, Any]]]]:
+    """把句子按固定时长分桶（默认 1 分钟），与 API 切片长度无关。"""
+    buckets: dict[int, list[dict[str, Any]]] = {}
+    for s in sorted(sentences, key=lambda x: x["begin"]):
+        idx = int(s["begin"] / 1000.0 // segment_seconds)
+        buckets.setdefault(idx, []).append(s)
+    result = []
+    for idx, sents in sorted(buckets.items()):
+        start = idx * segment_seconds
+        end = (idx + 1) * segment_seconds
+        if duration:
+            end = min(end, duration)
+        result.append((idx, start, end, sents))
+    return result
+
+
+def build_txt_segments(segments: list[tuple[int, float, float, list[dict[str, Any]]]]) -> str:
+    """按分桶分组的纯文本，段头格式与旧版脚本一致。"""
+    total = max((s[0] for s in segments), default=-1) + 1
+    lines: list[str] = []
+    for idx, start, end, sents in segments:
+        lines.append(f"（段 {idx + 1}/{total}  {hms(start)} - {hms(end)}）")
+        lines.append(build_txt(sents).strip())
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def build_markdown(
     title: str,
-    sentences: list[dict[str, Any]],
+    segments: list[tuple[int, float, float, list[dict[str, Any]]]],
     duration: float,
     model: str,
 ) -> str:
@@ -476,10 +508,15 @@ def build_markdown(
         f"> 时长 {hms(duration)} · 模型 `{model}` · 转写于 {time.strftime('%Y-%m-%d %H:%M')}",
         "",
     ]
-    for s in sentences:
-        prefix = f"[说话人{s['speaker']}] " if s.get("speaker") is not None else ""
-        lines.append(f"- `[{hms(s['begin'] / 1000)}]` {prefix}{s['text']}")
-    return "\n".join(lines) + "\n"
+    total = max((s[0] for s in segments), default=-1) + 1
+    for idx, start, end, sents in segments:
+        lines.append(f"### 段 {idx + 1}/{total}　{hms(start)} - {hms(end)}")
+        lines.append("")
+        for s in sents:
+            prefix = f"[说话人{s['speaker']}] " if s.get("speaker") is not None else ""
+            lines.append(f"- `[{hms(s['begin'] / 1000)}]` {prefix}{s['text']}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 # ======================================================================
@@ -646,6 +683,7 @@ def write_outputs(
     out_dir: Path,
     model: str,
     formats: set[str],
+    segment_seconds: float = 60.0,
 ) -> bool:
     """合并所有已完成片段，输出 md / srt / txt。"""
     sentences: list[dict[str, Any]] = []
@@ -660,6 +698,8 @@ def write_outputs(
     if not sentences:
         return False
 
+    segments = group_segments(sentences, segment_seconds, record.get("duration"))
+
     stem = record.get("out_stem") or src.stem
     duration = record.get("duration") or 0
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -668,7 +708,7 @@ def write_outputs(
     if "md" in formats:
         path = out_dir / f"{stem}.md"
         path.write_text(
-            build_markdown(stem, sentences, duration, model),
+            build_markdown(stem, segments, duration, model),
             encoding="utf-8",
         )
         written.append(path.name)
@@ -678,7 +718,7 @@ def write_outputs(
         written.append(path.name)
     if "txt" in formats:
         path = out_dir / f"{stem}.txt"
-        path.write_text(build_txt(sentences), encoding="utf-8")
+        path.write_text(build_txt_segments(segments), encoding="utf-8")
         written.append(path.name)
 
     record["done"] = all(p.get("status") == "done" for p in record["parts"])
@@ -706,8 +746,10 @@ def main() -> None:
     parser.add_argument("--words", action="store_true", help="返回词级时间戳（体积更大）")
     parser.add_argument("--diarize", action="store_true", help="开启说话人分离")
     parser.add_argument("--vocab", help="热词，逗号分隔，如 '页表,中断,进程调度'")
-    parser.add_argument("--part-minutes", type=float, default=120.0,
-                        help="每个任务的最大音频长度（分钟，默认 120）")
+    parser.add_argument("--part-minutes", type=float, default=1.0,
+                        help="每个任务的音频长度（分钟，默认 1；调大可显著减少请求数）")
+    parser.add_argument("--segment-minutes", type=float, default=1.0,
+                        help="输出按多少分钟分段（默认 1，与 API 切片长度无关）")
     parser.add_argument("--workers", type=int, default=3, help="并发任务数（默认 3）")
     parser.add_argument("--poll-timeout", type=float, default=7200.0,
                         help="单个任务最长等待秒数（默认 7200）")
@@ -724,6 +766,8 @@ def main() -> None:
         sys.exit("错误: --formats 只能包含 md,srt,txt")
     if args.part_minutes <= 0:
         sys.exit("错误: --part-minutes 必须大于 0")
+    if args.segment_minutes <= 0:
+        sys.exit("错误: --segment-minutes 必须大于 0")
     if args.workers < 1:
         sys.exit("错误: --workers 至少为 1")
 
@@ -779,6 +823,13 @@ def main() -> None:
         "共 %d 个文件，总时长 %s，预计计费 %s 元（免费额度抵扣 %s 后约 %s 元）",
         len(plan), hms(total_duration), f"{cost:.2f}",
         hms(min(total_duration, FREE_SECONDS)), f"{billable * PRICE_PER_SECOND:.2f}",
+    )
+    est_parts = sum(
+        len(plan_parts(d, args.part_minutes * 60.0)) for _, d in plan
+    )
+    log.info(
+        "按每段 %.0f 分钟切分，共约 %d 个异步任务；输出按 %.0f 分钟分段",
+        args.part_minutes, est_parts, args.segment_minutes,
     )
 
     if args.dry_run:
@@ -897,7 +948,10 @@ def main() -> None:
     # 统一合并输出
     for key, (src, record) in records.items():
         try:
-            if write_outputs(src, record, out_dir, args.model, args.formats):
+            if write_outputs(
+                src, record, out_dir, args.model, args.formats,
+                args.segment_minutes * 60.0,
+            ):
                 state.put(key, record)
                 stats["seconds"] += record["duration"]
                 log.info("  → %s: %s", src.name, ", ".join(record.get("outputs", [])))
