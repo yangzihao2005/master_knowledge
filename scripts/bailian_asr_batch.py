@@ -4,8 +4,8 @@
 bailian_asr_batch.py —— 用阿里云百炼 Qwen3-ASR-Flash-Filetrans 批量转写网课视频/音频
 
 相比旧版 mimo_asr_batch.py 的区别：
-  * 默认每 1 分钟一段（--part-minutes 可调），每段一个异步任务
-  * 接口本身返回「句级时间戳」，切片只是为了让输出按分钟分段，不靠偏移猜
+  * 默认每 10 分钟一段（--part-minutes 可调），输出固定按 1 分钟分段
+  * 接口本身返回「句级时间戳」，分段不靠偏移猜
   * 输出按 1 分钟一段分组（Markdown 小标题 / txt 段头），同时保留句级时间戳
   * 音频走百炼「临时上传凭证」传到临时 OSS（48 小时有效），不需要自己开 OSS Bucket
   * 支持多任务并发、断点续跑、失败重试
@@ -746,8 +746,8 @@ def main() -> None:
     parser.add_argument("--words", action="store_true", help="返回词级时间戳（体积更大）")
     parser.add_argument("--diarize", action="store_true", help="开启说话人分离")
     parser.add_argument("--vocab", help="热词，逗号分隔，如 '页表,中断,进程调度'")
-    parser.add_argument("--part-minutes", type=float, default=1.0,
-                        help="每个任务的音频长度（分钟，默认 1；调大可显著减少请求数）")
+    parser.add_argument("--part-minutes", type=float, default=10.0,
+                        help="每个任务的音频长度（分钟，默认 10；调小会增加请求数）")
     parser.add_argument("--segment-minutes", type=float, default=1.0,
                         help="输出按多少分钟分段（默认 1，与 API 切片长度无关）")
     parser.add_argument("--workers", type=int, default=3, help="并发任务数（默认 3）")
