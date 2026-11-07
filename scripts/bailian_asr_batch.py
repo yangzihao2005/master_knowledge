@@ -802,7 +802,7 @@ def main() -> None:
         args.part_minutes = max_part_seconds / 60.0
 
     if args.fresh and state_file.exists():
-        state_file.rename(state_file.with_suffix(".bak.json"))
+        state_file.replace(state_file.with_suffix(".bak.json"))
         log.info("--fresh: 旧断点已备份为 _asr_state.bak.json")
 
     # 统计时长
