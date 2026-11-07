@@ -468,6 +468,8 @@ def build_markdown(
 # 状态文件
 # ======================================================================
 class State:
+    """断点状态；所有写操作串行化，工作线程只提交副本，避免序列化时被并发修改。"""
+
     def __init__(self, path: Path) -> None:
         self.path = path
         self.lock = threading.Lock()
@@ -486,6 +488,15 @@ class State:
             self.data["files"][key] = value
             self.save()
 
+    def update_part(self, key: str, index: int, part: dict[str, Any]) -> None:
+        with self.lock:
+            record = self.data["files"].setdefault(key, {"parts": []})
+            parts = record.setdefault("parts", [])
+            while len(parts) <= index:
+                parts.append({"index": len(parts)})
+            parts[index] = dict(part)      # 存副本，后续工作线程再改也不影响
+            self.save()
+
     def save(self) -> None:
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.data, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -493,7 +504,7 @@ class State:
 
 
 # ======================================================================
-# 单文件流程
+# 单片段 / 单文件
 # ======================================================================
 def plan_parts(duration: float, part_seconds: float) -> list[tuple[int, float, float]]:
     parts = []
@@ -515,14 +526,15 @@ def run_part(
     raw_dir: Path,
     keep_audio: bool,
     poll_timeout: float,
-    on_progress=None,
+    state: State,
+    key: str,
 ) -> dict[str, Any]:
-    """执行一个片段：上传 → 提交 → 轮询 → 下载 JSON。返回更新后的 part 记录。"""
+    """执行一个片段：上传 → 提交 → 轮询 → 下载 JSON。返回更新后的 part。"""
     index = part["index"]
     start = part["start"]
     dur = part["duration"]
 
-    # 断点续跑：已有 task_id 就先尝试直接轮询
+    # 断点续跑：已有 task_id 就直接复用，避免重复计费
     result: dict[str, Any] | None = None
     if part.get("task_id"):
         log.info("  段%d：复用已有任务 %s", index + 1, part["task_id"])
@@ -549,8 +561,7 @@ def run_part(
         log.info("  段%d：提交任务", index + 1)
         task_id = client.submit(oss_url)
         part["task_id"] = task_id
-        if on_progress:            # 立刻落盘，崩溃后可直接复用任务，避免重复计费
-            on_progress()
+        state.update_part(key, index, part)   # 立刻落盘，崩溃后可复用任务
         log.info("  段%d：task_id=%s，等待转写...", index + 1, task_id)
 
         output = client.poll(task_id, timeout=poll_timeout)
@@ -573,84 +584,46 @@ def download_first(client: BailianClient, results: list[dict[str, Any]]) -> dict
     raise BailianError("任务成功但没有可下载的 transcription_url")
 
 
-def process_file(
-    client: BailianClient,
+def prepare_record(
     src: Path,
     rel_key: str,
-    out_dir: Path,
     state: State,
-    args: argparse.Namespace,
-    total_stats: dict[str, float],
-) -> None:
+    part_seconds: float,
+) -> dict[str, Any]:
+    """读取时长、规划片段，并复用上次状态里已完成的片段。"""
     record = state.get(rel_key) or {}
     duration = record.get("duration") or media_duration(src)
     record["duration"] = duration
-    record.setdefault("parts", [])
 
-    # 已有 parts 记录则按 index 复用
-    old_parts = {p["index"]: p for p in record["parts"]}
-    planned = plan_parts(duration, args.part_minutes * 60.0)
+    old_parts = {
+        p["index"]: p for p in record.get("parts", []) if "index" in p
+    }
     parts: list[dict[str, Any]] = []
-    for idx, start, dur in planned:
-        p = old_parts.get(idx) or {}
+    for idx, start, dur in plan_parts(duration, part_seconds):
+        p = dict(old_parts.get(idx) or {})
         p.update({"index": idx, "start": start, "duration": dur})
-        parts.append(p)
-    record["parts"] = parts
-    state.put(rel_key, record)
-
-    log.info(
-        "▶ %s（%s，%d 段，%d 线程）",
-        src.name, hms(duration), len(parts), args.workers,
-    )
-
-    stem = src.stem
-    raw_dir = out_dir / "raw" / stem
-
-    def persist() -> None:
-        record["parts"] = parts
-        state.put(rel_key, record)
-
-    # 上次已下载到 JSON 但没来得及更新状态：直接视为完成，避免重复计费
-    for p in parts:
         jp = Path(p.get("json") or "")
         if jp.is_file() and jp.stat().st_size > 0:
-            p["status"] = "done"
+            p["status"] = "done"       # 上次已下载但没来得及更新状态
+        parts.append(p)
 
-    todo = [p for p in parts if p.get("status") != "done" or not Path(p.get("json", "")).exists()]
-    if todo:
-        tmpdir = out_dir / "_audio" / stem
-        tmpdir.mkdir(parents=True, exist_ok=True)
-        try:
-            with ThreadPoolExecutor(max_workers=args.workers) as pool:
-                futures = {
-                    pool.submit(
-                        run_part, client, src, p, tmpdir, raw_dir,
-                        args.keep_audio, args.poll_timeout, persist,
-                    ): p
-                    for p in todo
-                }
-                for fut in as_completed(futures):
-                    part = futures[fut]
-                    try:
-                        updated = fut.result()
-                        parts[part["index"]] = updated
-                        record["parts"] = parts
-                        state.put(rel_key, record)
-                        log.info("  ✓ 段%d/%d 完成", part["index"] + 1, len(parts))
-                    except Exception as exc:
-                        part["status"] = "failed"
-                        part["error"] = str(exc)
-                        record["parts"] = parts
-                        state.put(rel_key, record)
-                        log.error("  ✗ 段%d/%d 失败: %s", part["index"] + 1, len(parts), exc)
-        finally:
-            if not args.keep_audio:
-                shutil.rmtree(tmpdir, ignore_errors=True)
+    record["parts"] = parts
+    record.pop("done", None)
+    state.put(rel_key, record)
+    return record
 
-    # 合并所有成功片段
+
+def write_outputs(
+    src: Path,
+    record: dict[str, Any],
+    out_dir: Path,
+    model: str,
+    formats: set[str],
+) -> bool:
+    """合并所有已完成片段，输出 md / srt / txt。"""
     sentences: list[dict[str, Any]] = []
-    for p in sorted(parts, key=lambda x: x["index"]):
-        json_path = Path(p.get("json", ""))
+    for p in sorted(record["parts"], key=lambda x: x["index"]):
+        json_path = Path(p.get("json") or "")
         if p.get("status") != "done" or not json_path.exists():
             continue
         offset_ms = int(round(p["start"] * 1000))
@@ -658,34 +631,32 @@ def process_file(
         sentences.extend(iter_sentences(data, offset_ms))
 
     if not sentences:
-        log.error("  %s 没有任何可用结果，跳过输出", src.name)
-        return
+        return False
 
+    stem = src.stem
+    duration = record.get("duration") or 0
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
-    if "md" in args.formats:
+
+    if "md" in formats:
         path = out_dir / f"{stem}.md"
         path.write_text(
-            build_markdown(stem, sentences, duration, args.model),
+            build_markdown(stem, sentences, duration, model),
             encoding="utf-8",
         )
         written.append(path.name)
-    if "srt" in args.formats:
+    if "srt" in formats:
         path = out_dir / f"{stem}.srt"
         path.write_text(build_srt(sentences), encoding="utf-8")
         written.append(path.name)
-    if "txt" in args.formats:
+    if "txt" in formats:
         path = out_dir / f"{stem}.txt"
         path.write_text(build_txt(sentences), encoding="utf-8")
         written.append(path.name)
 
-    done_all = all(p.get("status") == "done" for p in parts)
-    record["done"] = done_all
+    record["done"] = all(p.get("status") == "done" for p in record["parts"])
     record["outputs"] = written
-    state.put(rel_key, record)
-
-    total_stats["seconds"] += duration
-    log.info("  → 已输出: %s", ", ".join(written))
+    return True
 
 
 # ======================================================================
