@@ -1,0 +1,148 @@
+{
+ "version": 1,
+ "files": {
+  "【四六级作文语法】最常错的语法合集，看完真的捡回100分！ [BV1U84y1E7S8].mp4|13657451": {
+   "duration": 344.874833,
+   "out_stem": "【四六级作文语法】最常错的语法合集，看完真的捡回100分！ [BV1U84y1E7S8]",
+   "parts": [
+    {
+     "index": 0,
+     "start": 0.0,
+     "duration": 344.874833,
+     "oss_url": "oss://dashscope-instant/5185bddcede46de22ea4314899d57ab7/2026-11-08/1132670a-90f9-98f0-9f0b-d2d1b35a621f/7a4d86dca9e445d692e48d643549e3d9_part_000.mp3",
+     "uploaded_at": 1794150347,
+     "task_id": "cc86a9a8-390b-4026-a307-b73cf50f3941",
+     "usage": 340,
+     "status": "done",
+     "json": "F:\\视频\\转写结果\\raw\\【四六级作文语法】最常错的语法合集，看完真的捡回100分！ [BV1U84y1E7S8]\\part_000.json"
+    }
+   ],
+   "done": true,
+   "outputs": [
+    "【四六级作文语法】最常错的语法合集，看完真的捡回100分！ [BV1U84y1E7S8].md",
+    "【四六级作文语法】最常错的语法合集，看完真的捡回100分！ [BV1U84y1E7S8].txt"
+   ]
+  },
+  "极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF].mp4|186682831": {
+   "duration": 5926.107313,
+   "out_stem": "极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF]",
+   "parts": [
+    {
+     "index": 0,
+     "start": 0.0,
+     "duration": 600.0,
+     "oss_url": "oss://dashscope-instant/5185bddcede46de22ea4314899d57ab7/2026-11-08/8c87090a-384f-9a18-bf13-477d74ac6b58/14501e702f284e2cad9db468ba2bc664_part_000.mp3",
+     "uploaded_at": 1794150353,
+     "task_id": "07f79469-724d-4a78-8b08-7dd364fc6469",
+     "usage": 596,
+     "status": "done",
+     "json": "F:\\视频\\转写结果\\raw\\极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF]\\part_000.json"
+    },
+    {
+     "index": 1,
+     "start": 600.0,
+     "duration": 600.0,
+     "oss_url": "oss://dashscope-instant/5185bddcede46de22ea4314899d57ab7/2026-11-08/0de6ae49-1c57-9681-b26e-466775005da7/43db491f47544f59ab2402bd88dba1fa_part_001.mp3",
+     "uploaded_at": 1794150352,
+     "task_id": "49535811-cecb-4e6e-b558-4a50808c9556",
+     "usage": 586,
+     "status": "done",
+     "json": "F:\\视频\\转写结果\\raw\\极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF]\\part_001.json"
+    },
+    {
+     "index": 2,
+     "start": 1200.0,
+     "duration": 600.0,
+     "oss_url": "oss://dashscope-instant/5185bddcede46de22ea4314899d57ab7/2026-11-08/0785e0bc-25d4-9e09-8922-8c725184dc63/026062d41cee4e929bc11f1f84680af3_part_002.mp3",
+     "uploaded_at": 1794150352,
+     "task_id": "620e3a38-8989-4eb6-97a0-2e776c829d9c",
+     "usage": 575,
+     "status": "done",
+     "json": "F:\\视频\\转写结果\\raw\\极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF]\\part_002.json"
+    },
+    {
+     "index": 3,
+     "start": 1800.0,
+     "duration": 600.0,
+     "oss_url": "oss://dashscope-instant/5185bddcede46de22ea4314899d57ab7/2026-11-08/05dac440-f888-9d71-955d-b566a27767a1/9ff80518defa4cb6a61bf28b561df11a_part_003.mp3",
+     "uploaded_at": 1794150357,
+     "task_id": "79050741-fabc-4acb-a434-57e9545293ab",
+     "usage": 587,
+     "status": "done",
+     "json": "F:\\视频\\转写结果\\raw\\极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF]\\part_003.json"
+    },
+    {
+     "index": 4,
+     "start": 2400.0,
+     "duration": 600.0,
+     "oss_url": "oss://dashscope-instant/5185bddcede46de22ea4314899d57ab7/2026-11-08/f8c256ac-a711-9c26-a0c5-0a25f967d474/9889086d93424f69a12d71fea7ee2378_part_004.mp3",
+     "uploaded_at": 1794150375,
+     "task_id": "6dab8fe9-1a27-4622-9f6c-bad52f1f4ce3",
+     "usage": 589,
+     "status": "done",
+     "json": "F:\\视频\\转写结果\\raw\\极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF]\\part_004.json"
+    },
+    {
+     "index": 5,
+     "start": 3000.0,
+     "duration": 600.0,
+     "oss_url": "oss://dashscope-instant/5185bddcede46de22ea4314899d57ab7/2026-11-08/f88b0d11-2b64-9378-984e-d71e898e34fd/6b97607825ed4f71a45491faf0b2fd35_part_005.mp3",
+     "uploaded_at": 1794150372,
+     "task_id": "acd3b325-3c4e-4c66-9edd-b6290b6652c7",
+     "usage": 560,
+     "status": "done",
+     "json": "F:\\视频\\转写结果\\raw\\极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF]\\part_005.json"
+    },
+    {
+     "index": 6,
+     "start": 3600.0,
+     "duration": 600.0,
+     "oss_url": "oss://dashscope-instant/5185bddcede46de22ea4314899d57ab7/2026-11-08/81017db6-ec4a-9a73-9ef3-668fa355d075/49878236ac8f457fb8cd8ec97757802f_part_006.mp3",
+     "uploaded_at": 1794150375,
+     "task_id": "c7b8f9cb-7dc8-4827-bf67-7d1758690875",
+     "usage": 590,
+     "status": "done",
+     "json": "F:\\视频\\转写结果\\raw\\极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF]\\part_006.json"
+    },
+    {
+     "index": 7,
+     "start": 4200.0,
+     "duration": 600.0,
+     "oss_url": "oss://dashscope-instant/5185bddcede46de22ea4314899d57ab7/2026-11-08/d7dc75e8-57bf-90fe-a2de-9b569beff179/c739c7e9b21e4e2f922970bd1497979f_part_007.mp3",
+     "uploaded_at": 1794150378,
+     "task_id": "9236d376-c1e4-4255-a67f-6e20dd839195",
+     "usage": 577,
+     "status": "done",
+     "json": "F:\\视频\\转写结果\\raw\\极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF]\\part_007.json"
+    },
+    {
+     "index": 8,
+     "start": 4800.0,
+     "duration": 600.0,
+     "oss_url": "oss://dashscope-instant/5185bddcede46de22ea4314899d57ab7/2026-11-08/afd6ba6d-b791-9e74-954c-3bd694232487/5db2e77e8e1042ef8097e1ae41d03c41_part_008.mp3",
+     "uploaded_at": 1794150395,
+     "task_id": "86961efd-9b59-420f-9b92-a85d3b10c74c",
+     "usage": 584,
+     "status": "done",
+     "json": "F:\\视频\\转写结果\\raw\\极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF]\\part_008.json"
+    },
+    {
+     "index": 9,
+     "start": 5400.0,
+     "duration": 526.1073130000004,
+     "oss_url": "oss://dashscope-instant/5185bddcede46de22ea4314899d57ab7/2026-11-08/03026e73-4e44-9640-b579-80c46f75dce7/5efa1ea3ae714d9fa48ff374ccabdcab_part_009.mp3",
+     "uploaded_at": 1794150395,
+     "task_id": "2c7ad39b-1270-46b7-9e72-ec541c3af88d",
+     "usage": 516,
+     "status": "done",
+     "json": "F:\\视频\\转写结果\\raw\\极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF]\\part_009.json"
+    }
+   ],
+   "done": true,
+   "outputs": [
+    "极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF].md",
+    "极简英语语法，四六级+考研英语均适用 [BV13w4m1m7KF].txt"
+   ]
+  }
+ }
+}
