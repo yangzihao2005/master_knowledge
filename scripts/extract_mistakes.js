@@ -240,7 +240,7 @@ async function extractMistakes(params) {
 	let headerText = "";
 	if (!existingText) {
 		headerText = [
-			"> ℹ️ 由 `scripts/extract_mistakes.js` 自动归档；AI 批改按 `AGENTS.md` 错题批改规则执行（结合 `3.复盘与题库/03.答案库/` 与题下文字备注，自动跳过 Ink 画布）。",
+			"> ℹ️ 由 `scripts/extract_mistakes.js` 自动归档；AI 批改按 `AGENTS.md` 错题批改规则执行（结合 `1.考研数学/03.数二题库/答案库/` 与题下文字备注，自动跳过 Ink 画布）。",
 			"",
 		].join("\n");
 	} else if (!existingText.endsWith("\n")) {
